@@ -80,3 +80,57 @@ def delete_book(id):
     db.session.delete(book)
     db.session.commit()
     return jsonify({'message': 'Book deleted successfully'})
+
+
+from models import db, Book, Student, StudentBook
+from datetime import datetime
+
+# Emprunter un livre
+@books_bp.route('/books/<int:book_id>/borrow', methods=['POST'])
+def borrow_book(book_id):
+    data = request.get_json()
+    student_id = data.get('student_id')
+
+    if not student_id:
+        return jsonify({'error': 'student_id is required'}), 400
+
+    book = Book.query.get(book_id)
+    student = Student.query.get(student_id)
+
+    if not book or not student:
+        return jsonify({'error': 'Book or Student not found'}), 404
+
+    # Vérifie si le livre est déjà emprunté (non rendu)
+    existing_borrow = StudentBook.query.filter_by(book_id=book_id, return_date=None).first()
+    if existing_borrow:
+        return jsonify({'error': 'Book already borrowed'}), 400
+
+    borrowing = StudentBook(
+        student_id=student_id,
+        book_id=book_id,
+        borrow_date=datetime.utcnow()
+    )
+    db.session.add(borrowing)
+    db.session.commit()
+
+    return jsonify({'message': 'Book borrowed successfully'}), 200
+
+# Rendre un livre
+@books_bp.route('/books/<int:book_id>/return', methods=['POST'])
+def return_book(book_id):
+    data = request.get_json()
+    student_id = data.get('student_id')
+
+    if not student_id:
+        return jsonify({'error': 'student_id is required'}), 400
+
+    borrowing = StudentBook.query.filter_by(book_id=book_id, student_id=student_id, return_date=None).first()
+
+    if not borrowing:
+        return jsonify({'error': 'No active borrowing found for this book and student'}), 404
+
+    borrowing.return_date = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({'message': 'Book returned successfully'}), 200
+
